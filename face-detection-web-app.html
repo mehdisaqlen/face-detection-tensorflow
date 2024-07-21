@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Face Detection with TensorFlow.js</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/blazeface"></script>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        padding: 20px;
+        background-color: #000; /* Black background */
+        color: #fff; /* White text */
+        text-align: center; /* Center align everything */
+      }
+      #videoContainer {
+        position: relative;
+        margin: 0 auto 20px;
+        width: 640px;
+        height: 480px;
+      }
+      #overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+      }
+      #debugInfo {
+        margin-top: 10px;
+        white-space: pre-wrap;
+      }
+      button {
+        background-color: #1a1a1a; /* Dark background for button */
+        color: #fff; /* White text */
+        border: 2px solid #333; /* Dark border */
+        padding: 10px 20px;
+        font-size: 16px;
+        cursor: pointer;
+        transition: background-color 0.3s;
+      }
+      button:hover {
+        background-color: #333; /* Slightly lighter background on hover */
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Face Detection with TensorFlow.js & BlazeFace</h1>
+    <div id="videoContainer">
+      <video
+        id="video"
+        width="640"
+        height="480"
+        autoplay
+        muted
+        playsinline
+      ></video>
+      <canvas id="overlay" width="640" height="480"></canvas>
+    </div>
+    <button id="startButton">Start Face Detection</button>
+    <div id="debugInfo"></div>
+
+    <script>
+      const video = document.getElementById("video");
+      const overlay = document.getElementById("overlay");
+      const startButton = document.getElementById("startButton");
+      const debugInfo = document.getElementById("debugInfo");
+      const ctx = overlay.getContext("2d");
+
+      let model;
+
+      async function setupCamera() {
+        debugInfo.textContent += "Setting up camera...\n";
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({
+            video: { width: 640, height: 480 },
+          });
+          video.srcObject = stream;
+          return new Promise((resolve) => {
+            video.onloadedmetadata = () => {
+              debugInfo.textContent += "Camera setup complete.\n";
+              resolve(video);
+            };
+          });
+        } catch (error) {
+          throw new Error(`Camera setup failed: ${error.message}`);
+        }
+      }
+
+      function drawPredictions(predictions) {
+        ctx.clearRect(0, 0, overlay.width, overlay.height);
+        ctx.strokeStyle = "yellow";
+        ctx.lineWidth = 3;
+        ctx.fillStyle = "#FF0000";
+        ctx.font = "16px Arial";
+
+        predictions.forEach((prediction) => {
+          const [x, y, width, height] = prediction.topLeft.concat(
+            prediction.bottomRight
+          );
+
+          // Draw bounding box
+          ctx.strokeRect(x, y, width - x, height - y);
+
+          // Draw text above the bounding box
+          ctx.fillText("Face Detected", x, y - 5);
+        });
+      }
+
+      async function detectFaces() {
+        try {
+          const predictions = await model.estimateFaces(video, false);
+          drawPredictions(predictions);
+          debugInfo.textContent = `Faces detected: ${predictions.length}\n`;
+          requestAnimationFrame(detectFaces);
+        } catch (error) {
+          console.error("Face detection error:", error);
+          debugInfo.textContent += `\nFace detection error: ${error.message}`;
+        }
+      }
+
+      async function startFaceDetection() {
+        startButton.disabled = true;
+        debugInfo.textContent = "Starting face detection...\n";
+        try {
+          await setupCamera();
+          video.play();
+
+          debugInfo.textContent += "Loading BlazeFace model...\n";
+          model = await blazeface.load();
+          debugInfo.textContent += "BlazeFace model loaded.\n";
+
+          detectFaces();
+        } catch (error) {
+          console.error("Face detection setup error:", error);
+          debugInfo.textContent += `Error: ${error.message}\n`;
+          startButton.disabled = false;
+        }
+      }
+
+      startButton.addEventListener("click", startFaceDetection);
+
+      // Check if TensorFlow.js and BlazeFace are loaded
+      window.onload = () => {
+        if (typeof tf !== "undefined" && typeof blazeface !== "undefined") {
+          debugInfo.textContent =
+            "TensorFlow.js and BlazeFace loaded successfully.\n";
+        } else {
+          debugInfo.textContent =
+            "Error: TensorFlow.js or BlazeFace not loaded.\n";
+          console.error("TensorFlow.js or BlazeFace not loaded");
+        }
+      };
+    </script>
+  </body>
+</html>
